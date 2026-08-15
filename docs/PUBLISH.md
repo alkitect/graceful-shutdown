@@ -15,3 +15,29 @@ git push origin v0.3.3
 
 Repo URL: `https://github.com/alkitect/graceful-shutdown`
 
+## GitHub About
+
+| Field | Value |
+|-------|--------|
+| Description | Power off an idle, quiet Ubuntu GNOME desktop after a cancelable notification |
+| Website | https://ko-fi.com/alkitect |
+| Topics | `linux`, `ubuntu`, `gnome`, `systemd`, `power-management`, `wayland` |
+
+```bash
+gh repo edit alkitect/graceful-shutdown \
+  --description "Power off an idle, quiet Ubuntu GNOME desktop after a cancelable notification" \
+  --homepage "https://ko-fi.com/alkitect" \
+  --add-topic linux --add-topic ubuntu --add-topic gnome \
+  --add-topic systemd --add-topic power-management --add-topic wayland
+```
+
+Sidebar (manual if shown): Releases ✓ · Packages ✗ · Deployments ✗
+
+### v1.0.0 human gate (after extract)
+
+From this checkout:
+
+1. `./scripts/install-to-local.sh`
+2. Set `DRY_RUN=1` in config; enable timer; confirm healthy `check.log` / journal (no unexpected poweroff).
+3. When ready, set `POWEROFF_ENABLED=1` and drop `DRY_RUN` for real poweroff policy.
+4. Tag `v1.0.0` and push.
