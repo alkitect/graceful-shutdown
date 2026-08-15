@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.2 — 2026-08-15
+
+- CI: pin `XDG_CONFIG_HOME` / `XDG_STATE_HOME` under tmp `HOME` so install/uninstall assertions pass on GitHub Actions.
+
 ## 0.3.1 — 2026-08-15
 
 - Initial public extract from private Linux customization topic.
