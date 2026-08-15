@@ -83,3 +83,5 @@ Architecture: [docs/architecture/](docs/architecture/) · [ADR-001](docs/archite
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+Optional tip jar: [ko-fi.com/alkitect](https://ko-fi.com/alkitect)
