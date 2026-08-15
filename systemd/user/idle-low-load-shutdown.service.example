@@ -1,0 +1,10 @@
+[Unit]
+Description=Check idle + low CPU/GPU before graceful shutdown
+Conflicts=idle-low-load-shutdown.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=60
+Environment=XDG_RUNTIME_DIR=%t
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+ExecStart=%h/.local/bin/idle-low-load-shutdown
