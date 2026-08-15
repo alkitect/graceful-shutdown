@@ -67,7 +67,8 @@ grep -q 'CHECKER_VERSION=gs-lib-1' "${tmp}/.local/bin/idle-low-load-shutdown"
 for lib in idle.sh load.sh net.sh backup.sh; do
   test -f "${tmp}/.local/bin/graceful-shutdown-lib/${lib}"
 done
-test -f "${tmp}/.config/graceful-shutdown/config"
+test -f "${tmp}/.config/graceful-shutdown/config" \
+  || { echo "ci-check: config not under tmp HOME (XDG isolation broken?)" >&2; exit 1; }
 
 "${ROOT}/scripts/uninstall-from-local.sh"
 test ! -e "${tmp}/.local/bin/idle-low-load-shutdown"

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 0.3.3 — 2026-08-15
+- CI: bump `actions/checkout` to v5 (Node 24; silences Node 20 deprecation warning).
+
 ## 0.3.2 — 2026-08-15
 
 - CI: pin `XDG_CONFIG_HOME` / `XDG_STATE_HOME` under tmp `HOME` so install/uninstall assertions pass on GitHub Actions.
