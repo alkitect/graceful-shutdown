@@ -14,7 +14,15 @@ Public README required H2s (exact strings; enforced by `./scripts/ci-check.sh`):
 ## License
 ```
 
-Put the beginner path (install / verify / uninstall) above limits. Do not put private monorepo paths or the token `SSOT` in README prose — say “release source” instead. Gate: `./scripts/ci-check.sh`.
+Put the beginner path (install / verify / uninstall) above limits. Do not put private monorepo paths or the token `SSOT` in README prose — say “release source” instead.
+
+Also enforced by `./scripts/ci-check.sh`:
+
+- `.github/FUNDING.yml` with `ko_fi: alkitect`
+- README contains `ko-fi.com/alkitect` (soft tip line after License — not a new H2)
+- README must not link Patreon or Buy Me a Coffee
+
+Gate: `./scripts/ci-check.sh`.
 
 ## Versioning
 
