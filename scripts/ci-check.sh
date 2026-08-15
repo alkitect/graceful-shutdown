@@ -42,6 +42,17 @@ if grep -qE '\bSSOT\b' README.md; then
   exit 1
 fi
 
+# Tip jar: FUNDING.yml + soft README tip (alkitect Ko-fi)
+[[ -f .github/FUNDING.yml ]] || { echo "ci-check: missing .github/FUNDING.yml" >&2; exit 1; }
+grep -qE '^[[:space:]]*ko_fi:[[:space:]]*alkitect[[:space:]]*$' .github/FUNDING.yml \
+  || { echo "ci-check: .github/FUNDING.yml must set ko_fi: alkitect" >&2; exit 1; }
+grep -qF 'ko-fi.com/alkitect' README.md \
+  || { echo "ci-check: README must include Ko-fi tip link ko-fi.com/alkitect" >&2; exit 1; }
+if grep -qiE 'patreon\.com|buymeacoffee\.com' README.md; then
+  echo "ci-check: README must not link Patreon or Buy Me a Coffee" >&2
+  exit 1
+fi
+
 if grep -qF "${_p1}${_p2}" scripts/verify-graceful-shutdown.sh; then
   echo "ci-check: verify still references ${_p1}${_p2}" >&2
   exit 1
