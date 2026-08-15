@@ -20,13 +20,13 @@ Repo URL: `https://github.com/alkitect/graceful-shutdown`
 | Field | Value |
 |-------|--------|
 | Description | Power off an idle, quiet Ubuntu GNOME desktop after a cancelable notification |
-| Website | https://ko-fi.com/alkitect |
+| Website | _(empty — tip via README Ko-fi badge)_ |
 | Topics | `linux`, `ubuntu`, `gnome`, `systemd`, `power-management`, `wayland` |
 
 ```bash
 gh repo edit alkitect/graceful-shutdown \
   --description "Power off an idle, quiet Ubuntu GNOME desktop after a cancelable notification" \
-  --homepage "https://ko-fi.com/alkitect" \
+  --homepage "" \
   --add-topic linux --add-topic ubuntu --add-topic gnome \
   --add-topic systemd --add-topic power-management --add-topic wayland
 ```
