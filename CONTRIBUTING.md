@@ -1,0 +1,46 @@
+# Contributing
+
+## Versioning
+
+First public tag is recorded in `docs/PUBLISH.md` (`First public tag:`). Default is **0.1.0**. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in PUBLISH only for an intentional 0.9.x RC. After the first tag, bump from CHANGELOG Unreleased (`feat` → minor, `fix` → patch). Maintainers: `./scripts/ci-check.sh` must pass before tag.
+
+## Bug reports
+
+Please include:
+
+- Distro and desktop (expect GNOME Wayland)
+- Whether Mutter `GetIdletime` works (`gdbus` call in verify output)
+- Relevant `~/.local/state/graceful-shutdown/check.log` / `journalctl --user -t graceful-shutdown` lines (redact hostnames; logs may contain traffic rates)
+- Config thresholds (not secrets)
+
+## Behavior changes
+
+If you change policy semantics, update:
+
+- [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)
+- [docs/architecture/ADR-001-graceful-shutdown-policy.md](docs/architecture/ADR-001-graceful-shutdown-policy.md)
+
+Run before PR:
+
+```bash
+find scripts -type f -name '*.sh' -print0 | xargs -0 -r bash -n
+./scripts/test/test-policy-math.sh
+./scripts/ci-check.sh
+```
+
+## Sync policy (dual maintenance)
+
+- **Release SSOT:** this GitHub repository (tagged releases, public docs, ADR-001).
+- **Daily driver:** a private Linux customization tree may develop first; before the next public tag, copy behavior changes into this repo:
+  - `scripts/**`
+  - `config/example.config`
+  - `docs/IMPLEMENTATION.md`
+  - `docs/architecture/ADR-001*.md`
+- After a public tag, optionally mirror those paths back into the private tree if it lagged.
+- **Never** sync private Cursor plans, machine journals, or host-specific calibration values into this repo.
+- **Conflicts:** a human maintainer chooses; no automatic overwrite.
+- Private monorepo ADR copies are **mirrors** with a banner pointing here; semantic edits land in this repo first.
+
+## Safety defaults
+
+Shipped `example.config` keeps `POWEROFF_ENABLED=0` and `DRY_RUN=0`. Primary safety is `POWEROFF_ENABLED`; use `DRY_RUN=1` only for temporary soak logging. Do not flip `POWEROFF_ENABLED=1` in the example without a version bump and clear README warning.

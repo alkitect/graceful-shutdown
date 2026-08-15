@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll input idle + CPU/GPU every 30s for graceful shutdown
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30
+AccuracySec=1s
+Unit=idle-low-load-shutdown.service
+
+[Install]
+WantedBy=timers.target
