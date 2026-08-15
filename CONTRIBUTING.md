@@ -19,7 +19,8 @@ Put the beginner path (install / verify / uninstall) above limits. Do not put pr
 Also enforced by `./scripts/ci-check.sh`:
 
 - `.github/FUNDING.yml` with `ko_fi: alkitect`
-- README contains `ko-fi.com/alkitect` (soft tip line after License — not a new H2)
+- README Ko-fi GitHub button (`githubbutton_sm.svg` → `ko-fi.com/alkitect`) under the tagline
+- README soft tip containing `ko-fi.com/alkitect` (after License)
 - README must not link Patreon or Buy Me a Coffee
 
 Gate: `./scripts/ci-check.sh`.

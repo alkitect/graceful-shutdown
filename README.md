@@ -2,6 +2,8 @@
 
 Powers off a Linux desktop only when you’re idle and the machine is quiet — after a notification you can cancel.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect)
+
 **Installed names:** binary `idle-low-load-shutdown`, user timer/service of the same name, XDG config `~/.config/graceful-shutdown`.
 
 ## What this does
