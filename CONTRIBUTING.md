@@ -1,5 +1,21 @@
 # Contributing
 
+## README conventions
+
+Public README required H2s (exact strings; enforced by `./scripts/ci-check.sh`):
+
+```text
+## What this does
+## Who this is for
+## Quick start
+## Check it works
+## Uninstall
+## Limits & safety
+## License
+```
+
+Put the beginner path (install / verify / uninstall) above limits. Do not put private monorepo paths or the token `SSOT` in README prose — say “release source” instead. Gate: `./scripts/ci-check.sh`.
+
 ## Versioning
 
 First public tag is recorded in `docs/PUBLISH.md` (`First public tag:`). Default is **0.1.0**. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in PUBLISH only for an intentional 0.9.x RC. After the first tag, bump from CHANGELOG Unreleased (`feat` → minor, `fix` → patch). Maintainers: `./scripts/ci-check.sh` must pass before tag.
@@ -30,7 +46,7 @@ find scripts -type f -name '*.sh' -print0 | xargs -0 -r bash -n
 
 ## Sync policy (dual maintenance)
 
-- **Release SSOT:** this GitHub repository (tagged releases, public docs, ADR-001).
+- **Release source:** this GitHub repository (tagged releases, public docs, ADR-001).
 - **Daily driver:** a private Linux customization tree may develop first; before the next public tag, copy behavior changes into this repo:
   - `scripts/**`
   - `config/example.config`

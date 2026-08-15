@@ -24,6 +24,24 @@ if [[ -n "${hits}" ]]; then
   exit 1
 fi
 
+# Required public README H2s (anchored; canonical list for this repo)
+REQUIRED_H2=(
+  "## What this does"
+  "## Who this is for"
+  "## Quick start"
+  "## Check it works"
+  "## Uninstall"
+  "## Limits & safety"
+  "## License"
+)
+for h in "${REQUIRED_H2[@]}"; do
+  grep -qFx "${h}" README.md || { echo "ci-check: README missing H2: ${h}" >&2; exit 1; }
+done
+if grep -qE '\bSSOT\b' README.md; then
+  echo "ci-check: README must not use SSOT; say release source" >&2
+  exit 1
+fi
+
 if grep -qF "${_p1}${_p2}" scripts/verify-graceful-shutdown.sh; then
   echo "ci-check: verify still references ${_p1}${_p2}" >&2
   exit 1
