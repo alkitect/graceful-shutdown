@@ -2,7 +2,7 @@
 
 Powers off your Linux desktop when you’re idle and the machine is quiet — after a notification you can cancel.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
 
 ## What this does
 
@@ -91,4 +91,4 @@ This can power off the machine. Hard stops and scope:
 
 MIT — see [LICENSE](LICENSE).
 
-Optional tip jar: [ko-fi.com/alkitect](https://ko-fi.com/alkitect)
+Optional tip jar: [ko-fi.com/alkitect](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
