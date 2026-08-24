@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Install: restore `idle-low-load-shutdown.timer` when it was already enabled/active; warn if `POWEROFF_ENABLED=1` but the timer is disabled. Uninstall prints that live polling stops.
+
 ## 0.3.3 — 2026-08-15
 - CI: bump `actions/checkout` to v5 (Node 24; silences Node 20 deprecation warning).
 

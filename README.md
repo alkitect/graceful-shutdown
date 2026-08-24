@@ -29,7 +29,7 @@ systemctl --user enable --now idle-low-load-shutdown.timer
 
 **What you installed:** a user timer that periodically runs `idle-low-load-shutdown`. Config is seeded at `~/.config/graceful-shutdown/config`. The binary, timer, and service share that name.
 
-**Stay safe before enabling poweroff:** leave `POWEROFF_ENABLED=0` until verify looks good. Optional: set `DRY_RUN=1` temporarily so checks log without shutting down (shipped example uses `DRY_RUN=0`; the real gate is `POWEROFF_ENABLED`). When ready, set `POWEROFF_ENABLED=1`, or use `./scripts/install-to-local.sh --enable-automation`. Thresholds and VPN/GPU tuning: see **Configure**.
+**Stay safe before enabling poweroff:** leave `POWEROFF_ENABLED=0` until verify looks good. Optional: set `DRY_RUN=1` temporarily so checks log without shutting down (shipped example uses `DRY_RUN=0`; the real gate is `POWEROFF_ENABLED`). When ready, set `POWEROFF_ENABLED=1`, or use `./scripts/install-to-local.sh --enable-automation`. A plain reinstall **restores** the timer if it was already enabled/active; `uninstall-from-local.sh` disables it — do not uninstall the live host during extract work (use tmp `HOME` for CI). Thresholds and VPN/GPU tuning: see **Configure**.
 
 **Needs:** GNOME Wayland session with `gdbus`, `systemd --user`, `loginctl`, `ip`, `notify-send`, `flock`, `timeout`, and polkit rights for `systemctl poweroff`.
 

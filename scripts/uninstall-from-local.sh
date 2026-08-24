@@ -25,6 +25,7 @@ for arg in "$@"; do
 done
 
 if command -v systemctl >/dev/null 2>&1; then
+  echo "Disabling idle-low-load-shutdown.timer (live polling stops until re-enabled)."
   systemctl --user disable --now idle-low-load-shutdown.timer 2>/dev/null || true
   systemctl --user disable --now graceful-shutdown.timer 2>/dev/null || true
   systemctl --user daemon-reload 2>/dev/null || true

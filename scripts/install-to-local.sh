@@ -18,6 +18,7 @@ for arg in "$@"; do
       echo "Usage: $(basename "$0") [--enable-automation]"
       echo "  Installs checker + libs + units. Does not execute the checker."
       echo "  Set POWEROFF_ENABLED=1 in config before --enable-automation."
+      echo "  If the timer was already enabled/active, a plain reinstall restores it."
       exit 0
       ;;
     *)
@@ -26,6 +27,18 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Snapshot before overwrite/daemon-reload (uninstall+install still needs --enable-automation).
+WAS_TIMER_ENABLED=0
+WAS_TIMER_ACTIVE=0
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl --user is-enabled idle-low-load-shutdown.timer >/dev/null 2>&1; then
+    WAS_TIMER_ENABLED=1
+  fi
+  if systemctl --user is-active idle-low-load-shutdown.timer >/dev/null 2>&1; then
+    WAS_TIMER_ACTIVE=1
+  fi
+fi
 
 mkdir -p "${BIN}" "${CFG_DIR}" "${SYSTEMD_USER}" "${LIB_DIR}"
 
@@ -88,14 +101,32 @@ echo "Enable polling (does not run checker now):"
 echo "  systemctl --user enable --now idle-low-load-shutdown.timer"
 echo "Log: \${XDG_STATE_HOME:-\$HOME/.local/state}/graceful-shutdown/check.log"
 
+enable_timer() {
+  local why="$1"
+  echo ""
+  echo "Enabling idle-low-load-shutdown.timer (${why})..."
+  systemctl --user enable --now idle-low-load-shutdown.timer
+  echo "Timer enabled. Checker runs on schedule only — not invoked now."
+}
+
 if [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
   if ! grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null; then
     echo "" >&2
     echo "Refusing --enable-automation: POWEROFF_ENABLED is not 1 in ${CFG_DIR}/config" >&2
     exit 1
   fi
-  echo ""
-  echo "Enabling idle-low-load-shutdown.timer (--enable-automation)..."
-  systemctl --user enable --now idle-low-load-shutdown.timer
-  echo "Timer enabled. Checker runs on schedule only — not invoked now."
+  enable_timer "--enable-automation"
+elif [[ "${WAS_TIMER_ENABLED}" -eq 1 || "${WAS_TIMER_ACTIVE}" -eq 1 ]]; then
+  # Overwrite reinstall must not leave a previously live host timer dead.
+  enable_timer "restored prior enablement/active state"
+elif command -v systemctl >/dev/null 2>&1; then
+  if grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null \
+    && ! systemctl --user is-enabled idle-low-load-shutdown.timer >/dev/null 2>&1; then
+    echo "" >&2
+    echo "WARNING: POWEROFF_ENABLED=1 but idle-low-load-shutdown.timer is disabled." >&2
+    echo "  Polling will not run until you:" >&2
+    echo "    systemctl --user enable --now idle-low-load-shutdown.timer" >&2
+    echo "  or re-run: $0 --enable-automation" >&2
+    echo "  (Do not uninstall the live host during extracts — use tmp HOME for ci-check.)" >&2
+  fi
 fi
