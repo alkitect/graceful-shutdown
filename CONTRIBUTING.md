@@ -25,6 +25,8 @@ Also enforced by `./scripts/ci-check.sh`:
 
 Gate: `./scripts/ci-check.sh`.
 
+**Maintainer note:** `uninstall-from-local.sh` disables the timer. Do not uninstall against the live host during extract or CI work — use a tmp `HOME` (and matching `XDG_*`) for install/uninstall round-trips.
+
 ## Versioning
 
 First public tag is recorded in `docs/PUBLISH.md` (`First public tag:`). Default is **0.1.0**. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in PUBLISH only for an intentional 0.9.x RC. After the first tag, bump from CHANGELOG Unreleased (`feat` → minor, `fix` → patch). Maintainers: `./scripts/ci-check.sh` must pass before tag.
