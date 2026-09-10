@@ -2,7 +2,6 @@
 
 Powers off your Linux desktop when you’re idle and the machine is quiet — after a notification you can cancel.
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
 
 ## What this does
 
@@ -46,6 +45,12 @@ DRY_RUN=1 ~/.local/bin/idle-low-load-shutdown
 - While tuning later: watch `~/.local/state/graceful-shutdown/check.log`.
 
 Maintainers: `./scripts/test/test-policy-math.sh` · `./scripts/ci-check.sh`.
+
+## Support my work
+
+Tip jar for the next desktop fix. Or a coffee so the next script stays boring on purpose.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
 
 ## Uninstall
 
