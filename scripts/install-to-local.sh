@@ -29,9 +29,10 @@ for arg in "$@"; do
 done
 
 # Snapshot before overwrite/daemon-reload (uninstall+install still needs --enable-automation).
+# Skip under ALKITECT_CI_TMP — systemctl --user always targets the live session.
 WAS_TIMER_ENABLED=0
 WAS_TIMER_ACTIVE=0
-if command -v systemctl >/dev/null 2>&1; then
+if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
   if systemctl --user is-enabled idle-low-load-shutdown.timer >/dev/null 2>&1; then
     WAS_TIMER_ENABLED=1
   fi
@@ -71,15 +72,17 @@ done
 # Remove legacy timer that powered off every 15 min regardless of idle.
 LEGACY_TIMER="${SYSTEMD_USER}/graceful-shutdown.timer"
 LEGACY_SERVICE="${SYSTEMD_USER}/graceful-shutdown.service"
-if command -v systemctl >/dev/null 2>&1; then
+if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
   systemctl --user disable --now graceful-shutdown.timer 2>/dev/null || true
   systemctl --user daemon-reload 2>/dev/null || true
 fi
 rm -f "${LEGACY_TIMER}" "${LEGACY_SERVICE}"
 rm -f "${SYSTEMD_USER}/timers.target.wants/graceful-shutdown.timer"
 
-if command -v systemctl >/dev/null 2>&1; then
+if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
   systemctl --user daemon-reload
+elif [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+  echo "ALKITECT_CI_TMP=1: skipped systemctl (unit files under tmp HOME only)"
 fi
 
 echo ""
@@ -109,7 +112,9 @@ enable_timer() {
   echo "Timer enabled. Checker runs on schedule only — not invoked now."
 }
 
-if [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
+if [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+  : # no enable/restore under CI tmp
+elif [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
   if ! grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null; then
     echo "" >&2
     echo "Refusing --enable-automation: POWEROFF_ENABLED is not 1 in ${CFG_DIR}/config" >&2

@@ -73,6 +73,22 @@ trap cleanup EXIT
 export HOME="${tmp}"
 export XDG_CONFIG_HOME="${tmp}/.config"
 export XDG_STATE_HOME="${tmp}/.local/state"
+export XDG_RUNTIME_DIR="${tmp}/run"
+mkdir -p "${XDG_CONFIG_HOME}" "${XDG_STATE_HOME}" "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+export ALKITECT_CI_TMP=1
+
+_unit_snap() {
+  {
+    echo "=== idle-low-load-shutdown.timer ==="
+    systemctl --user is-enabled idle-low-load-shutdown.timer 2>/dev/null || echo "is-enabled:n/a"
+    systemctl --user show idle-low-load-shutdown.timer -p ActiveState,UnitFileState,SubState --no-page 2>/dev/null \
+      || echo "show:n/a"
+  } >"$1"
+}
+_snap_b="$(mktemp)"; _snap_a="$(mktemp)"
+_unit_snap "${_snap_b}"
+
 "${ROOT}/scripts/install-to-local.sh"
 test -x "${tmp}/.local/bin/idle-low-load-shutdown"
 test -x "${tmp}/.local/bin/verify-graceful-shutdown"
@@ -88,6 +104,14 @@ test ! -e "${tmp}/.local/bin/idle-low-load-shutdown"
 test ! -e "${tmp}/.local/bin/verify-graceful-shutdown"
 test ! -e "${tmp}/.local/bin/graceful-shutdown-lib"
 test -f "${tmp}/.config/graceful-shutdown/config"
+
+_unit_snap "${_snap_a}"
+if ! diff -q "${_snap_b}" "${_snap_a}" >/dev/null; then
+  echo "ci-check: live idle-low-load-shutdown.timer state changed during CI_TMP install/uninstall:" >&2
+  diff -u "${_snap_b}" "${_snap_a}" >&2 || true
+  exit 1
+fi
+rm -f "${_snap_b}" "${_snap_a}"
 
 # Versioning gate (alkitect public extracts)
 if [[ -f docs/PUBLISH.md ]] && grep -qF 'RC-BEFORE-1.0' docs/PUBLISH.md; then

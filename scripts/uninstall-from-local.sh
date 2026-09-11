@@ -24,11 +24,13 @@ for arg in "$@"; do
   esac
 done
 
-if command -v systemctl >/dev/null 2>&1; then
+if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
   echo "Disabling idle-low-load-shutdown.timer (live polling stops until re-enabled)."
   systemctl --user disable --now idle-low-load-shutdown.timer 2>/dev/null || true
   systemctl --user disable --now graceful-shutdown.timer 2>/dev/null || true
   systemctl --user daemon-reload 2>/dev/null || true
+elif [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+  echo "ALKITECT_CI_TMP=1: skipped systemctl disable"
 fi
 
 rm -f "${SYSTEMD_USER}/idle-low-load-shutdown.service"
