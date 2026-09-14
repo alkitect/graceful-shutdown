@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.5 — 2026-09-14
+
+- Install: restore timer from `automation.wanted` marker and/or `POWEROFF_ENABLED=1` (not only prior enablement snapshot). Uninstall keeps the marker unless `--purge-config`.
+- Helper: vendored `scripts/lib/automation-wanted.sh`; ci-check covers marker/purge/POWEROFF matrix and README em-dash ban.
+- Docs: Quick start / Limits document restore triggers and rollback triad.
+
 ## 0.3.4 — 2026-09-14
 
 - Docs: portal README (Try dry-run before enable, Issues help, Releases surface).

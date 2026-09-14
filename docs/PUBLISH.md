@@ -6,19 +6,18 @@ README variant: A
 
 First public tag: v0.3.3
 
-Latest tag: **v0.3.4** (portal README + timer restore on overwrite install)
+Latest tag: **v0.3.5** (automation.wanted + POWEROFF_ENABLED restore)
 
 Default first tag is 0.1.0. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in this file only for an intentional 0.9.x RC.
 
 ```bash
 ./scripts/ci-check.sh
-git tag -a v0.3.4 -m "v0.3.4"
-git push origin main
-git push origin v0.3.4
-gh release create v0.3.4 --title "v0.3.4" --notes-file - <<'EOF'
-## 0.3.4
+git tag -a v0.3.5 -m "v0.3.5"
+git push origin main v0.3.5
+gh release create v0.3.5 --title "v0.3.5" --notes-file - <<'EOF'
+## 0.3.5
 
-Portal README rewrite (Try before enable). Install restores timer enablement on overwrite.
+Restore timer from automation.wanted and/or POWEROFF_ENABLED=1; marker kept unless --purge-config.
 EOF
 ```
 

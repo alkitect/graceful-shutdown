@@ -2,14 +2,19 @@
 # Install idle-low-load shutdown checker; remove legacy broken graceful-shutdown timer.
 # Usage: install-to-local.sh [--enable-automation]
 # Does NOT run the checker script (avoids accidental shutdown during setup).
+# Call aw_snapshot_units at install START (before overwriting units).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/automation-wanted.sh
+source "${ROOT}/scripts/lib/automation-wanted.sh"
+
 BIN="${HOME}/.local/bin"
 CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/graceful-shutdown"
 SYSTEMD_USER="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 LIB_DIR="${BIN}/graceful-shutdown-lib"
 ENABLE_AUTOMATION=0
+TIMER_UNIT="idle-low-load-shutdown.timer"
 
 for arg in "$@"; do
   case "${arg}" in
@@ -18,7 +23,7 @@ for arg in "$@"; do
       echo "Usage: $(basename "$0") [--enable-automation]"
       echo "  Installs checker + libs + units. Does not execute the checker."
       echo "  Set POWEROFF_ENABLED=1 in config before --enable-automation."
-      echo "  If the timer was already enabled/active, a plain reinstall restores it."
+      echo "  Restores timer if previously enabled, automation.wanted exists, or POWEROFF_ENABLED=1."
       exit 0
       ;;
     *)
@@ -28,25 +33,18 @@ for arg in "$@"; do
   esac
 done
 
-# Snapshot before overwrite/daemon-reload (uninstall+install still needs --enable-automation).
-# Skip under ALKITECT_CI_TMP — systemctl --user always targets the live session.
-WAS_TIMER_ENABLED=0
-WAS_TIMER_ACTIVE=0
-if [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
-  if systemctl --user is-enabled idle-low-load-shutdown.timer >/dev/null 2>&1; then
-    WAS_TIMER_ENABLED=1
-  fi
-  if systemctl --user is-active idle-low-load-shutdown.timer >/dev/null 2>&1; then
-    WAS_TIMER_ACTIVE=1
-  fi
-fi
+# Snapshot before overwrite/daemon-reload.
+aw_snapshot_units "${TIMER_UNIT}"
 
 mkdir -p "${BIN}" "${CFG_DIR}" "${SYSTEMD_USER}" "${LIB_DIR}"
 
 install -m0755 "${ROOT}/scripts/idle-low-load-shutdown.sh" "${BIN}/idle-low-load-shutdown"
 install -m0755 "${ROOT}/scripts/verify-graceful-shutdown.sh" "${BIN}/verify-graceful-shutdown"
 for lib in "${ROOT}/scripts/lib/"*.sh; do
-  install -m0644 "${lib}" "${LIB_DIR}/$(basename "${lib}")"
+  base="$(basename "${lib}")"
+  # Host automation helper is sourced by install only; not a checker policy lib.
+  [[ "${base}" == "automation-wanted.sh" ]] && continue
+  install -m0644 "${lib}" "${LIB_DIR}/${base}"
 done
 
 if [[ ! -f "${CFG_DIR}/config" ]]; then
@@ -101,37 +99,41 @@ echo "  2. Set POWEROFF_ENABLED=1 when ready"
 echo "  3. Optional: DRY_RUN=1 for a few polling cycles (check log)"
 echo ""
 echo "Enable polling (does not run checker now):"
-echo "  systemctl --user enable --now idle-low-load-shutdown.timer"
+echo "  systemctl --user enable --now ${TIMER_UNIT}"
 echo "Log: \${XDG_STATE_HOME:-\$HOME/.local/state}/graceful-shutdown/check.log"
 
-enable_timer() {
+AW_ARMED_CONFIG=0
+if grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null; then
+  AW_ARMED_CONFIG=1
+fi
+
+do_enable() {
   local why="$1"
-  echo ""
-  echo "Enabling idle-low-load-shutdown.timer (${why})..."
-  systemctl --user enable --now idle-low-load-shutdown.timer
+  AW_FORCE_ENABLE=0
+  if [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
+    aw_enable_units "${why}" "${TIMER_UNIT}"
+    aw_mark_wanted "${CFG_DIR}"
+    return 0
+  fi
+  aw_enable_units "${why}" "${TIMER_UNIT}"
+  aw_mark_wanted "${CFG_DIR}"
   echo "Timer enabled. Checker runs on schedule only — not invoked now."
 }
 
-if [[ -n "${ALKITECT_CI_TMP:-}" ]]; then
-  : # no enable/restore under CI tmp
-elif [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
-  if ! grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null; then
+if [[ "${ENABLE_AUTOMATION}" -eq 1 ]]; then
+  if [[ "${AW_ARMED_CONFIG}" -ne 1 ]]; then
     echo "" >&2
     echo "Refusing --enable-automation: POWEROFF_ENABLED is not 1 in ${CFG_DIR}/config" >&2
     exit 1
   fi
-  enable_timer "--enable-automation"
-elif [[ "${WAS_TIMER_ENABLED}" -eq 1 || "${WAS_TIMER_ACTIVE}" -eq 1 ]]; then
-  # Overwrite reinstall must not leave a previously live host timer dead.
-  enable_timer "restored prior enablement/active state"
-elif command -v systemctl >/dev/null 2>&1; then
-  if grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null \
-    && ! systemctl --user is-enabled idle-low-load-shutdown.timer >/dev/null 2>&1; then
+  do_enable "--enable-automation"
+elif aw_should_restore "${CFG_DIR}"; then
+  do_enable "restored (snapshot/marker/POWEROFF_ENABLED=1)"
+elif [[ -z "${ALKITECT_CI_TMP:-}" ]] && command -v systemctl >/dev/null 2>&1; then
+  if [[ "${AW_ARMED_CONFIG}" -eq 1 ]] \
+    && ! systemctl --user is-enabled "${TIMER_UNIT}" >/dev/null 2>&1; then
+    # Should not happen if aw_should_restore works; keep as last-resort notice.
     echo "" >&2
-    echo "WARNING: POWEROFF_ENABLED=1 but idle-low-load-shutdown.timer is disabled." >&2
-    echo "  Polling will not run until you:" >&2
-    echo "    systemctl --user enable --now idle-low-load-shutdown.timer" >&2
-    echo "  or re-run: $0 --enable-automation" >&2
-    echo "  (Do not uninstall the live host during extracts — use tmp HOME for ci-check.)" >&2
+    echo "WARNING: POWEROFF_ENABLED=1 but ${TIMER_UNIT} is disabled and restore did not run." >&2
   fi
 fi

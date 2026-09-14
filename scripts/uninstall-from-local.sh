@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Disable idle-low-load shutdown timer and remove installed units + binaries.
 # Usage: uninstall-from-local.sh [--purge-config]
+# Keeps automation.wanted unless --purge-config (with config).
 set -euo pipefail
 
 BIN="${HOME}/.local/bin"
@@ -14,7 +15,7 @@ for arg in "$@"; do
     --purge-config) PURGE_CONFIG=1 ;;
     -h|--help)
       echo "Usage: $(basename "$0") [--purge-config]"
-      echo "  Removes binaries, libs, and user units. Keeps config unless --purge-config."
+      echo "  Removes binaries, libs, and user units. Keeps config and automation.wanted unless --purge-config."
       exit 0
       ;;
     *)
@@ -44,11 +45,14 @@ rm -f "${BIN}/verify-graceful-shutdown"
 rm -rf "${LIB_DIR}"
 
 if [[ "${PURGE_CONFIG}" -eq 1 ]]; then
-  rm -f "${CFG_DIR}/config" "${CFG_DIR}/inhibit"
+  rm -f "${CFG_DIR}/config" "${CFG_DIR}/inhibit" "${CFG_DIR}/automation.wanted"
   rmdir "${CFG_DIR}" 2>/dev/null || true
   echo "Removed config under ${CFG_DIR}."
 else
   echo "Config kept at ${CFG_DIR}/config (delete manually or re-run with --purge-config)."
+  if [[ -f "${CFG_DIR}/automation.wanted" ]]; then
+    echo "automation.wanted kept (reinstall will restore the timer)."
+  fi
 fi
 
 echo "Removed idle-low-load-shutdown, verify-graceful-shutdown, graceful-shutdown-lib, and legacy graceful-shutdown user units."

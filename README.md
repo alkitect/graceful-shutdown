@@ -54,19 +54,19 @@ Verify should exit cleanly on GNOME Wayland. With `DRY_RUN=1`, the checker logs 
 
 ### Enable timer and poweroff
 
-When dry-run looks good, enable the timer and turn on real poweroff in config (`POWEROFF_ENABLED=1`), or reinstall with automation:
+When dry-run looks good, set `POWEROFF_ENABLED=1` in `~/.config/graceful-shutdown/config`, then enable the timer:
 
 ```bash
-systemctl --user enable --now idle-low-load-shutdown.timer
 # set POWEROFF_ENABLED=1 in ~/.config/graceful-shutdown/config
-# or: ./scripts/install-to-local.sh --enable-automation
+./scripts/install-to-local.sh --enable-automation
+# or: systemctl --user enable --now idle-low-load-shutdown.timer
 ```
 
-A plain reinstall restores the timer if it was already enabled/active. You should get a cancelable notification before any real `systemctl poweroff`.
+A plain reinstall restores the timer when any of these hold: the timer was already enabled/active, `~/.config/graceful-shutdown/automation.wanted` exists, or `POWEROFF_ENABLED=1`. That intent file is written on successful enable. You should get a cancelable notification before any real `systemctl poweroff`.
 
 ## Check it works
 
-Success is a clean verify and a dry-run checker run with no unexpected poweroff. After enable, you should see checks in `check.log` and a notification you can cancel before shutdown.
+Success is a clean verify and a dry-run checker run with no unexpected poweroff. After enable, you should see checks in `check.log` and a notification you can cancel before shutdown. After an uninstall without purge, a plain reinstall should leave `systemctl --user is-enabled idle-low-load-shutdown.timer` as `enabled` when you had armed the tool.
 
 <details>
 <summary>Optional confirmation scripts</summary>
@@ -92,9 +92,11 @@ Tip jar for the next desktop fix. Or a coffee so the next script stays boring on
 
 ```bash
 ./scripts/uninstall-from-local.sh
-# also remove config:
+# also remove config and automation.wanted:
 ./scripts/uninstall-from-local.sh --purge-config
 ```
+
+Plain uninstall keeps `config` and `automation.wanted` so a later install can restore the timer. Use `--purge-config` only when you intend to forget that intent.
 
 ## Configure
 
@@ -116,6 +118,8 @@ This can power off the machine.
 - Network: bulk RX/TX on the default-route iface only (VPN-safe; never sums tunnel + wifi).
 - Backup: optional Ubuntu Déjà Dup / `duplicity` stay-awake (`BACKUP_CHECK_ENABLED=1`); harmless if those processes never appear.
 - Kill-switches: `touch ~/.config/graceful-shutdown/inhibit`, `POWEROFF_ENABLED=0`, or `systemctl --user stop idle-low-load-shutdown.timer`.
+- Automation intent: `~/.config/graceful-shutdown/automation.wanted` is written when the timer is enabled. Uninstall keeps it unless `--purge-config`. Reinstall restores the timer when the marker exists, the timer was already enabled, or `POWEROFF_ENABLED=1`.
+- Rollback (disarm): `systemctl --user disable --now idle-low-load-shutdown.timer`, remove `automation.wanted`, and set `POWEROFF_ENABLED=0` (config alone can re-arm restore on the next install).
 - Defaults: shipped `POWEROFF_ENABLED=0`. v0.3 is extract-installable; a real poweroff soak for v1.0 is a human gate.
 - This GitHub repo is the release source for tagged releases and public docs. See [CONTRIBUTING.md](CONTRIBUTING.md).
 

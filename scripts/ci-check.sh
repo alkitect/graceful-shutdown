@@ -67,6 +67,25 @@ grep -qE '^DRY_RUN=0' config/example.config
 find scripts -type f -name '*.sh' -print0 | xargs -0 -r bash -n
 ./scripts/test/test-policy-math.sh
 
+# Em-dash / en-dash ban in README (public product voice)
+if LC_ALL=C grep -q $'\xe2\x80\x93\|\xe2\x80\x94' README.md; then
+  echo "ci-check: README must not use en-dash or em-dash" >&2
+  exit 1
+fi
+
+# Vendor sync when running inside Linux monorepo checkout
+_canon=""
+if [[ -f "${ROOT}/../../shared/lib/automation-wanted.sh" ]]; then
+  _canon="$(cd "${ROOT}/../.." && pwd)/shared/lib/automation-wanted.sh"
+elif [[ -n "${CANONICAL:-}" && -f "${CANONICAL}" ]]; then
+  _canon="${CANONICAL}"
+fi
+if [[ -n "${_canon}" ]]; then
+  cmp -s "${_canon}" "${ROOT}/scripts/lib/automation-wanted.sh" \
+    || { echo "ci-check: scripts/lib/automation-wanted.sh drifts from ${_canon}" >&2; exit 1; }
+fi
+test -f "${ROOT}/scripts/lib/automation-wanted.sh"
+
 tmp="$(mktemp -d)"
 cleanup() { rm -rf "${tmp}"; }
 trap cleanup EXIT
@@ -77,6 +96,10 @@ export XDG_RUNTIME_DIR="${tmp}/run"
 mkdir -p "${XDG_CONFIG_HOME}" "${XDG_STATE_HOME}" "${XDG_RUNTIME_DIR}"
 chmod 700 "${XDG_RUNTIME_DIR}"
 export ALKITECT_CI_TMP=1
+
+# shellcheck source=scripts/lib/automation-wanted.sh
+source "${ROOT}/scripts/lib/automation-wanted.sh"
+_cfg="${XDG_CONFIG_HOME}/graceful-shutdown"
 
 _unit_snap() {
   {
@@ -96,14 +119,43 @@ grep -q 'CHECKER_VERSION=gs-lib-1' "${tmp}/.local/bin/idle-low-load-shutdown"
 for lib in idle.sh load.sh net.sh backup.sh; do
   test -f "${tmp}/.local/bin/graceful-shutdown-lib/${lib}"
 done
+test ! -e "${tmp}/.local/bin/graceful-shutdown-lib/automation-wanted.sh" \
+  || { echo "ci-check: automation-wanted must not install into graceful-shutdown-lib" >&2; exit 1; }
 test -f "${tmp}/.config/graceful-shutdown/config" \
   || { echo "ci-check: config not under tmp HOME (XDG isolation broken?)" >&2; exit 1; }
+# Fresh seed: POWEROFF=0, no marker → restore should not arm
+test ! -f "${_cfg}/automation.wanted" \
+  || { echo "ci-check: fresh install must not write automation.wanted" >&2; exit 1; }
 
+# Marker survives uninstall; purge removes it
+aw_mark_wanted "${_cfg}"
 "${ROOT}/scripts/uninstall-from-local.sh"
+test -f "${_cfg}/automation.wanted" \
+  || { echo "ci-check: uninstall must keep automation.wanted" >&2; exit 1; }
+test -f "${_cfg}/config"
+
+"${ROOT}/scripts/install-to-local.sh"
+# Marker + CI_TMP path should re-mark (restore decision true)
+test -f "${_cfg}/automation.wanted" \
+  || { echo "ci-check: reinstall with marker must keep/write automation.wanted" >&2; exit 1; }
+
+"${ROOT}/scripts/uninstall-from-local.sh" --purge-config
+test ! -e "${_cfg}/automation.wanted" \
+  || { echo "ci-check: --purge-config must remove automation.wanted" >&2; exit 1; }
+test ! -e "${_cfg}/config"
+
+# POWEROFF_ENABLED=1 alone arms restore (re-seed config)
+"${ROOT}/scripts/install-to-local.sh"
+sed -i 's/^POWEROFF_ENABLED=.*/POWEROFF_ENABLED=1/' "${_cfg}/config"
+rm -f "${_cfg}/automation.wanted"
+"${ROOT}/scripts/install-to-local.sh"
+test -f "${_cfg}/automation.wanted" \
+  || { echo "ci-check: POWEROFF_ENABLED=1 must arm restore (write marker under CI_TMP)" >&2; exit 1; }
+
+"${ROOT}/scripts/uninstall-from-local.sh" --purge-config
 test ! -e "${tmp}/.local/bin/idle-low-load-shutdown"
 test ! -e "${tmp}/.local/bin/verify-graceful-shutdown"
 test ! -e "${tmp}/.local/bin/graceful-shutdown-lib"
-test -f "${tmp}/.config/graceful-shutdown/config"
 
 _unit_snap "${_snap_a}"
 if ! diff -q "${_snap_b}" "${_snap_a}" >/dev/null; then
