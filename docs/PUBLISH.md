@@ -6,13 +6,20 @@ README variant: A
 
 First public tag: v0.3.3
 
+Latest tag: **v0.3.4** (portal README + timer restore on overwrite install)
+
 Default first tag is 0.1.0. Never copy another alkitect repo’s tag. Use `RC-BEFORE-1.0` in this file only for an intentional 0.9.x RC.
 
 ```bash
 ./scripts/ci-check.sh
-git tag -a v0.3.3 -m "v0.3.3"
+git tag -a v0.3.4 -m "v0.3.4"
 git push origin main
-git push origin v0.3.3
+git push origin v0.3.4
+gh release create v0.3.4 --title "v0.3.4" --notes-file - <<'EOF'
+## 0.3.4
+
+Portal README rewrite (Try before enable). Install restores timer enablement on overwrite.
+EOF
 ```
 
 Repo URL: `https://github.com/alkitect/graceful-shutdown`

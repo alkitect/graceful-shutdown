@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+## 0.3.4 — 2026-09-14
+
+- Docs: portal README (Try dry-run before enable, Issues help, Releases surface).
 - Install: restore `idle-low-load-shutdown.timer` when it was already enabled/active; warn if `POWEROFF_ENABLED=1` but the timer is disabled. Uninstall prints that live polling stops.
+- Tip catch-up: CI tmp systemctl skip, Ko-fi Support section, path scrub.
 
 ## 0.3.3 — 2026-08-15
 - CI: bump `actions/checkout` to v5 (Node 24; silences Node 20 deprecation warning).

@@ -1,50 +1,86 @@
 # Graceful shutdown (idle + low load)
 
-Powers off your Linux desktop when you’re idle and the machine is quiet — after a notification you can cancel.
+Powers off your Linux desktop when you are idle and the machine is quiet, after a notification you can cancel.
 
+[Quick start](#quick-start) · [Releases](https://github.com/alkitect/graceful-shutdown/releases) · [License](#license)
+
+Latest release notes: [CHANGELOG.md](CHANGELOG.md) and [GitHub Releases](https://github.com/alkitect/graceful-shutdown/releases). A plain `git clone` follows the default branch tip unless you check out a tag; prefer a tagged release for day-to-day use.
 
 ## What this does
 
-Desktops often stay on overnight. Aggressive timers cut power while you’re still working; weak ones never fire.
+Desktops often stay on overnight. Aggressive timers cut power while you are still working; weak ones never fire.
 
-This tool waits until **input is idle**, then checks that **CPU/GPU and network stay calm** (and optionally that Ubuntu Backup isn’t running). When those gates pass for long enough, it **notifies you**, gives a short cancel window, and runs `systemctl poweroff`.
+This tool waits until input is idle, then checks that CPU/GPU and network stay calm (and optionally that Ubuntu Backup is not running). When those gates pass for long enough, it notifies you, gives a short cancel window, and runs `systemctl poweroff`.
 
-**Safe by default:** poweroff stays off (`POWEROFF_ENABLED=0`). Install and verify first; only enable when you’re comfortable with real shutdowns.
+Safe by default: poweroff stays off (`POWEROFF_ENABLED=0`). Install and verify first; only enable when you are comfortable with real shutdowns.
 
 ## Who this is for
 
-- **In:** Ubuntu + **GNOME Wayland** — uses GNOME’s built-in idle signal (Mutter), not a custom X11 hack.
-- **In:** You want auto poweroff that **won’t kill downloads or backups** mid-run.
-- **Not for:** KDE, X11-only idle setups, or always-on servers.
+This is for Ubuntu with GNOME Wayland. It uses GNOME's built-in idle signal (Mutter), not a custom X11 hack. You want auto poweroff that will not kill downloads or backups mid-run.
+
+It is not for KDE, X11-only idle setups, or always-on servers.
 
 ## Quick start
+
+Install seeds a user timer that periodically runs `idle-low-load-shutdown`, plus config at `~/.config/graceful-shutdown/config`. Leave `POWEROFF_ENABLED=0` until a dry-run checker looks good. The real gate is `POWEROFF_ENABLED` (shipped example uses `DRY_RUN=0`).
+
+Then: [Install](#install) → [Try dry-run](#try-dry-run) → [Enable timer and poweroff](#enable-timer-and-poweroff).
+
+### Install
+
+Needs: GNOME Wayland session with `gdbus`, `systemd --user`, `loginctl`, `ip`, `notify-send`, `flock`, `timeout`, and polkit rights for `systemctl poweroff`.
+
+Stable path: clone or download a release tag from [Releases](https://github.com/alkitect/graceful-shutdown/releases), then run the install script. Tip of the default branch is fine for contributors.
 
 ```bash
 git clone https://github.com/alkitect/graceful-shutdown.git
 cd graceful-shutdown
+# optional: git checkout vX.Y.Z   # pin to a release tag
 ./scripts/install-to-local.sh
-systemctl --user enable --now idle-low-load-shutdown.timer
 ```
 
-**What you installed:** a user timer that periodically runs `idle-low-load-shutdown`. Config is seeded at `~/.config/graceful-shutdown/config`. The binary, timer, and service share that name.
+The binary, timer, and service share the name `idle-low-load-shutdown`. Thresholds and VPN/GPU tuning: see Configure.
 
-**Stay safe before enabling poweroff:** leave `POWEROFF_ENABLED=0` until verify looks good. Optional: set `DRY_RUN=1` temporarily so checks log without shutting down (shipped example uses `DRY_RUN=0`; the real gate is `POWEROFF_ENABLED`). When ready, set `POWEROFF_ENABLED=1`, or use `./scripts/install-to-local.sh --enable-automation`. A plain reinstall **restores** the timer if it was already enabled/active. Thresholds and VPN/GPU tuning: see **Configure**.
+### Try dry-run
 
-**Needs:** GNOME Wayland session with `gdbus`, `systemd --user`, `loginctl`, `ip`, `notify-send`, `flock`, `timeout`, and polkit rights for `systemctl poweroff`.
-
-## Check it works
-
-You want a clean verify and a dry-run checker run with no unexpected poweroff.
+Confirm the checker and idle path before you enable the timer or real poweroff:
 
 ```bash
 GS_TOPIC_ROOT="$PWD" ./scripts/verify-graceful-shutdown.sh
 DRY_RUN=1 ~/.local/bin/idle-low-load-shutdown
 ```
 
-- If verify fails on idle: confirm you’re on GNOME Wayland and the session looks active as in the script output.
-- While tuning later: watch `~/.local/state/graceful-shutdown/check.log`.
+Verify should exit cleanly on GNOME Wayland. With `DRY_RUN=1`, the checker logs what it would do without shutting down. If verify fails on idle, confirm you are on GNOME Wayland and the session looks active as in the script output. While tuning later, watch `~/.local/state/graceful-shutdown/check.log`.
 
-Maintainers: `./scripts/test/test-policy-math.sh` · `./scripts/ci-check.sh`.
+### Enable timer and poweroff
+
+When dry-run looks good, enable the timer and turn on real poweroff in config (`POWEROFF_ENABLED=1`), or reinstall with automation:
+
+```bash
+systemctl --user enable --now idle-low-load-shutdown.timer
+# set POWEROFF_ENABLED=1 in ~/.config/graceful-shutdown/config
+# or: ./scripts/install-to-local.sh --enable-automation
+```
+
+A plain reinstall restores the timer if it was already enabled/active. You should get a cancelable notification before any real `systemctl poweroff`.
+
+## Check it works
+
+Success is a clean verify and a dry-run checker run with no unexpected poweroff. After enable, you should see checks in `check.log` and a notification you can cancel before shutdown.
+
+<details>
+<summary>Optional confirmation scripts</summary>
+
+```bash
+GS_TOPIC_ROOT="$PWD" ./scripts/verify-graceful-shutdown.sh
+DRY_RUN=1 ~/.local/bin/idle-low-load-shutdown
+./scripts/test/test-policy-math.sh
+./scripts/ci-check.sh
+```
+
+</details>
+
+Questions or a stuck install: open a GitHub [Issue](https://github.com/alkitect/graceful-shutdown/issues) or see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Support my work
 
@@ -68,32 +104,23 @@ Tip jar for the next desktop fix. Or a coffee so the next script stays boring on
 
 ## How it works
 
-Gates: input idle → effective low-load streak (pause clock on busy load/net/backup) → grace → `systemctl poweroff`.
+Gates run in order: input idle, then an effective low-load streak (the clock pauses on busy load, net, or backup), then a grace notification, then `systemctl poweroff` when `POWEROFF_ENABLED=1`.
 
-| Path | Role |
-|------|------|
-| `scripts/idle-low-load-shutdown.sh` | Checker (`CHECKER_VERSION=gs-lib-1`) |
-| `scripts/lib/` | Idle / load / net / backup helpers |
-| `scripts/install-to-local.sh` / `uninstall-from-local.sh` / `verify-graceful-shutdown.sh` | Deploy |
-| `scripts/test/test-policy-math.sh` | Offline policy smoke |
-| `config/example.config` | Defaults |
-| `systemd/user/*.example` | User oneshot + 30s timer |
-
-Architecture: [docs/architecture/](docs/architecture/) · [ADR-001](docs/architecture/ADR-001-graceful-shutdown-policy.md) · [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+Policy detail: [docs/architecture/](docs/architecture/) · [ADR-001](docs/architecture/ADR-001-graceful-shutdown-policy.md) · [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
 
 ## Limits & safety
 
-This can power off the machine. Hard stops and scope:
+This can power off the machine.
 
-- **Platform:** GNOME Wayland with Mutter idle only. KDE / X11 idle are unsupported.
-- **Network:** bulk RX/TX on the **default-route** iface only (VPN-safe; never sums tunnel + wifi).
-- **Backup:** optional Ubuntu Déjà Dup / `duplicity` stay-awake (`BACKUP_CHECK_ENABLED=1`); harmless if those processes never appear.
-- **Kill-switches:** `touch ~/.config/graceful-shutdown/inhibit`, `POWEROFF_ENABLED=0`, or `systemctl --user stop idle-low-load-shutdown.timer`.
-- **Defaults:** shipped `POWEROFF_ENABLED=0`. v0.3 is extract-installable; a real poweroff soak for v1.0 is a human gate.
-- This GitHub repo is the **release source** for tagged releases and public docs — see [CONTRIBUTING.md](CONTRIBUTING.md).
+- Platform: GNOME Wayland with Mutter idle only. KDE / X11 idle are unsupported.
+- Network: bulk RX/TX on the default-route iface only (VPN-safe; never sums tunnel + wifi).
+- Backup: optional Ubuntu Déjà Dup / `duplicity` stay-awake (`BACKUP_CHECK_ENABLED=1`); harmless if those processes never appear.
+- Kill-switches: `touch ~/.config/graceful-shutdown/inhibit`, `POWEROFF_ENABLED=0`, or `systemctl --user stop idle-low-load-shutdown.timer`.
+- Defaults: shipped `POWEROFF_ENABLED=0`. v0.3 is extract-installable; a real poweroff soak for v1.0 is a human gate.
+- This GitHub repo is the release source for tagged releases and public docs. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 Optional tip jar: [ko-fi.com/alkitect](https://ko-fi.com/alkitect/?hidefeed=true&widget=true&embed=true)
