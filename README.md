@@ -10,7 +10,7 @@ Latest release notes: [CHANGELOG.md](CHANGELOG.md) and [GitHub Releases](https:/
 
 Desktops often stay on overnight. Aggressive timers cut power while you are still working; weak ones never fire.
 
-This tool waits until input is idle, then checks that CPU/GPU and network stay calm (and optionally that Ubuntu Backup is not running). When those gates pass for long enough, it notifies you, gives a short cancel window, and runs `systemctl poweroff`.
+This tool waits until input is idle, then checks that the machine is not doing hard work (CPU/GPU phase gates, bulk network, optional Ubuntu Backup). When those gates pass for long enough, it notifies you, gives a short cancel window, and runs `systemctl poweroff`. Moderate background CPU while you are away can still allow shutdown; long GPU jobs and large downloads keep the machine awake.
 
 Safe by default: poweroff stays off (`POWEROFF_ENABLED=0`). Install and verify first; only enable when you are comfortable with real shutdowns.
 
@@ -50,7 +50,7 @@ GS_TOPIC_ROOT="$PWD" ./scripts/verify-graceful-shutdown.sh
 DRY_RUN=1 ~/.local/bin/idle-low-load-shutdown
 ```
 
-Verify should exit cleanly on GNOME Wayland. With `DRY_RUN=1`, the checker logs what it would do without shutting down. If verify fails on idle, confirm you are on GNOME Wayland and the session looks active as in the script output. While tuning later, watch `~/.local/state/graceful-shutdown/check.log`.
+Verify should exit cleanly on GNOME Wayland. With `DRY_RUN=1`, the checker logs what it would do without shutting down. Look for `phase=A` or `phase=B` and `load=ok` under moderate background CPU (not stuck `load=high` from a legacy 10% rule). If verify fails on idle, confirm you are on GNOME Wayland and the session looks active as in the script output. While tuning later, watch `~/.local/state/graceful-shutdown/check.log`.
 
 ### Enable timer and poweroff
 
@@ -102,11 +102,12 @@ Plain uninstall keeps `config` and `automation.wanted` so a later install can re
 
 - Dual-GPU ambient noise: raise `GPU_MAX_PCT` or set `GPU_DRM_CARD` to the discrete card.
 - VPN: leave `NET_IFACE` empty so the default route (tunnel when connected) is used.
+- Phase load: defaults use a critical CPU gate then a short rolling average (see Limits). Tune `CPU_PHASE_*` / `PHASE_*` or set `PHASE_LOAD_ENABLED=0` for the legacy single 10% CPU threshold.
 - Thresholds: follow `check.log` / `verify-graceful-shutdown` while away with downloads / backups.
 
 ## How it works
 
-Gates run in order: input idle, then an effective low-load streak (the clock pauses on busy load, net, or backup), then a grace notification, then `systemctl poweroff` when `POWEROFF_ENABLED=1`.
+Gates run in order: input idle (about 1 min), then an effective ~14 min load streak (clock pauses on hard load, bulk net, or backup), then a grace notification, then `systemctl poweroff` when `POWEROFF_ENABLED=1`. Default load policy is two-phase: first ~10 min only critical CPU/GPU pauses the streak; then a 3 min rolling average confirms the machine is not working hard.
 
 Policy detail: [docs/architecture/](docs/architecture/) · [ADR-001](docs/architecture/ADR-001-graceful-shutdown-policy.md) · [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
 
@@ -115,12 +116,13 @@ Policy detail: [docs/architecture/](docs/architecture/) · [ADR-001](docs/archit
 This can power off the machine.
 
 - Platform: GNOME Wayland with Mutter idle only. KDE / X11 idle are unsupported.
+- Load: locked or unlocked AFK with moderate background CPU (for example ~40%) can complete the path and power off. Hard CPU (critical threshold), GPU above caps, bulk downloads, and Ubuntu Backup work still pause. Long CPU-only jobs left running while you are away may be powered off after ~15 min plus grace.
 - Network: bulk RX/TX on the default-route iface only (VPN-safe; never sums tunnel + wifi).
 - Backup: optional Ubuntu Déjà Dup / `duplicity` stay-awake (`BACKUP_CHECK_ENABLED=1`); harmless if those processes never appear.
-- Kill-switches: `touch ~/.config/graceful-shutdown/inhibit`, `POWEROFF_ENABLED=0`, or `systemctl --user stop idle-low-load-shutdown.timer`.
+- Kill-switches: `touch ~/.config/graceful-shutdown/inhibit`, `PHASE_LOAD_ENABLED=0` (legacy strict single-threshold load), `POWEROFF_ENABLED=0`, `systemctl --user stop idle-low-load-shutdown.timer`, or unlock / move the mouse.
 - Automation intent: `~/.config/graceful-shutdown/automation.wanted` is written when the timer is enabled. Uninstall keeps it unless `--purge-config`. Reinstall restores the timer when the marker exists, the timer was already enabled, or `POWEROFF_ENABLED=1`.
 - Rollback (disarm): `systemctl --user disable --now idle-low-load-shutdown.timer`, remove `automation.wanted`, and set `POWEROFF_ENABLED=0` (config alone can re-arm restore on the next install).
-- Defaults: shipped `POWEROFF_ENABLED=0`. v0.3 is extract-installable; a real poweroff soak for v1.0 is a human gate.
+- Defaults: shipped `POWEROFF_ENABLED=0` and `PHASE_LOAD_ENABLED=1`. Prefer a tagged release for day-to-day use; see [Releases](https://github.com/alkitect/graceful-shutdown/releases). A real poweroff soak for v1.0 is a human gate.
 - This GitHub repo is the release source for tagged releases and public docs. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License

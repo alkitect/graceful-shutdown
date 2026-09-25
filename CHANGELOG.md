@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-25
+
+- **Behavior:** default two-phase load (`PHASE_LOAD_ENABLED=1`): Phase A critical CPU (~65%) for ~10 min of streak, then Phase B 3-min rolling avg + spike. Moderate AFK background CPU can power off; GPU / bulk net / backup still pause.
+- Grace and poweroff abort use instant critical/spike only (not Phase B avg); sample failure fail-closed.
+- Install merge appends `PHASE_*` keys; clears `load-window.tsv` on first PHASE append; banner documents kill-switches including `PHASE_LOAD_ENABLED=0`.
+- Legacy: `PHASE_LOAD_ENABLED=0` restores single-threshold `CPU_MAX_PCT=10`. Soft `LOAD_WINDOW_*` / `window_warmup` are no-ops when phase mode is on.
+- `CHECKER_VERSION=gs-lib-2`. Docs: ADR-001, IMPLEMENTATION (§ Migration), README Limits.
 
 ## 0.3.5 — 2026-09-14
 

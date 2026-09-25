@@ -103,6 +103,107 @@ backup_busy() {
 [[ "$(backup_busy 0 0 0 0)" == "0" ]] || fail "idle ok"
 ok "backup busy classification"
 
+# --- two-phase load eval (source load.sh with stubs) ---
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TMPDIR_PHASE="$(mktemp -d)"
+trap 'rm -rf "${TMPDIR_PHASE}"' EXIT
+
+PHASE_LOAD_ENABLED=1
+PHASE_A_SEC=600
+CPU_PHASE_A_MAX_PCT=65
+PHASE_B_WINDOW_SEC=180
+CPU_PHASE_B_MAX_PCT=50
+GPU_PHASE_B_MAX_PCT=20
+CPU_PHASE_B_SPIKE_MAX_PCT=80
+PHASE_B_MIN_SAMPLES=5
+GPU_MAX_PCT=15
+GPU_CHECK_VRAM=0
+GPU_VRAM_MAX_PCT=90
+CPU_MAX_PCT=10
+CPU_IDLE_PCT=7
+GPU_IDLE_PCT=10
+HYSTERESIS_OK_POLLS=2
+LOAD_WINDOW_ENABLED=0
+LOAD_WINDOW_FILE="${TMPDIR_PHASE}/load-window.tsv"
+LOAD_WINDOW_POLLS=8
+LOAD_WINDOW_REQUIRE_FULL=1
+LOAD_WINDOW_METRIC=avg
+LOAD_WINDOW_MAX_HIGH=1
+LOAD_WINDOW_MIN_OK_FRAC=95
+HYSTERESIS_STATE_FILE="${TMPDIR_PHASE}/hyst.state"
+HYSTERESIS_OK_COUNT_FILE="${TMPDIR_PHASE}/hyst.count"
+CPU_SAMPLE_SEC=0
+EXT_CMD_TIMEOUT_SEC=1
+log() { :; }
+run_timeout() { "$@"; }
+
+# shellcheck source=scripts/lib/load.sh
+source "${ROOT}/scripts/lib/load.sh"
+
+# Phase A: 40% OK, 70% busy
+EFFECTIVE_STREAK_SEC=100
+CPU_PCT_RESULT=40
+GPU_PCT_RESULT=0
+GPU_VRAM_PCT_RESULT=0
+load_phase_eval && fail "phase A 40% should not be busy" || true
+CPU_PCT_RESULT=70
+load_phase_eval || fail "phase A 70% should be busy"
+ok "phase A critical threshold"
+
+# Phase B: build 5 samples @ 40% then eval
+EFFECTIVE_STREAK_SEC=700
+: >"${LOAD_WINDOW_FILE}"
+now="$(date +%s)"
+for i in 1 2 3 4 5; do
+  printf '%s\t40\t0\t0\t0\n' "$(( now - 30 * i ))" >>"${LOAD_WINDOW_FILE}"
+done
+CPU_PCT_RESULT=40
+load_phase_eval && fail "phase B avg 40% should not be busy" || true
+# avg 55%
+: >"${LOAD_WINDOW_FILE}"
+for i in 1 2 3 4 5; do
+  printf '%s\t55\t0\t0\t0\n' "$(( now - 30 * i ))" >>"${LOAD_WINDOW_FILE}"
+done
+CPU_PCT_RESULT=45
+load_phase_eval || fail "phase B avg 55% should be busy"
+ok "phase B rolling avg"
+
+# Spike in window
+: >"${LOAD_WINDOW_FILE}"
+for i in 1 2 3 4; do
+  printf '%s\t40\t0\t0\t0\n' "$(( now - 30 * i ))" >>"${LOAD_WINDOW_FILE}"
+done
+printf '%s\t85\t0\t0\t1\n' "$(( now - 10 ))" >>"${LOAD_WINDOW_FILE}"
+CPU_PCT_RESULT=40
+load_phase_eval || fail "phase B spike 85% should be busy"
+ok "phase B spike"
+
+# Grace critical: 40% OK, sample fail busy, 70% busy
+CPU_PCT_RESULT=40
+GPU_PCT_RESULT=0
+load_phase_critical_busy && fail "grace 40% should not abort" || true
+CPU_PCT_RESULT="-"
+load_phase_critical_busy || fail "grace sample fail should abort"
+CPU_PCT_RESULT=70
+GPU_PCT_RESULT=0
+load_phase_critical_busy || fail "grace 70% should abort"
+ok "grace instant critical"
+
+# GPU instant in phase A
+EFFECTIVE_STREAK_SEC=100
+CPU_PCT_RESULT=10
+GPU_PCT_RESULT=40
+load_phase_eval || fail "GPU 40% should be busy"
+ok "GPU instant block"
+
+# Legacy mode still uses CPU_MAX
+PHASE_LOAD_ENABLED=0
+CPU_PCT_RESULT=40
+GPU_PCT_RESULT=0
+load_is_high || fail "legacy 40% > CPU_MAX 10 should be high"
+PHASE_LOAD_ENABLED=1
+ok "legacy load_is_high"
+
 # --- default-route helper (read-only; skip if no ip) ---
 if command -v ip >/dev/null 2>&1; then
   iface="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="dev") {print $(i+1); exit}}' || true)"

@@ -52,12 +52,29 @@ if [[ ! -f "${CFG_DIR}/config" ]]; then
   echo "Seeded ${CFG_DIR}/config (POWEROFF_ENABLED=0)"
 else
   echo "Keeping existing ${CFG_DIR}/config"
-  for key in INPUT_IDLE_SEC LOW_LOAD_STREAK_SEC CPU_MAX_PCT GPU_MAX_PCT CPU_IDLE_PCT GPU_IDLE_PCT HYSTERESIS_OK_POLLS GPU_DRM_CARD GPU_CHECK_VRAM GPU_VRAM_MAX_PCT HIGH_LOAD_POLLS_TO_RESET GRACE_SEC CPU_SAMPLE_SEC EXT_CMD_TIMEOUT_SEC LOAD_WINDOW_ENABLED LOAD_WINDOW_POLLS LOAD_WINDOW_MIN_OK_FRAC LOAD_WINDOW_MAX_HIGH LOAD_WINDOW_METRIC LOAD_WINDOW_REQUIRE_FULL NET_CHECK_ENABLED NET_RX_MIN_BPS NET_TX_MIN_BPS NET_BUSY_POLLS NET_IFACE BACKUP_CHECK_ENABLED BACKUP_TREAT_UI_PROCESS LOG_TO_JOURNAL LOG_MAX_LINES LOG_HEARTBEAT LOG_ALWAYS_SAMPLE_LOAD LOG_STREAK_MILESTONE_SEC LOG_POLL_GAP_WARN_SEC DRY_RUN; do
+  PHASE_APPENDED=0
+  for key in PHASE_LOAD_ENABLED PHASE_A_SEC CPU_PHASE_A_MAX_PCT PHASE_B_WINDOW_SEC CPU_PHASE_B_MAX_PCT GPU_PHASE_B_MAX_PCT CPU_PHASE_B_SPIKE_MAX_PCT INPUT_IDLE_SEC LOW_LOAD_STREAK_SEC CPU_MAX_PCT GPU_MAX_PCT CPU_IDLE_PCT GPU_IDLE_PCT HYSTERESIS_OK_POLLS GPU_DRM_CARD GPU_CHECK_VRAM GPU_VRAM_MAX_PCT HIGH_LOAD_POLLS_TO_RESET GRACE_SEC CPU_SAMPLE_SEC EXT_CMD_TIMEOUT_SEC LOAD_WINDOW_ENABLED LOAD_WINDOW_POLLS LOAD_WINDOW_MIN_OK_FRAC LOAD_WINDOW_MAX_HIGH LOAD_WINDOW_METRIC LOAD_WINDOW_REQUIRE_FULL NET_CHECK_ENABLED NET_RX_MIN_BPS NET_TX_MIN_BPS NET_BUSY_POLLS NET_IFACE BACKUP_CHECK_ENABLED BACKUP_TREAT_UI_PROCESS LOG_TO_JOURNAL LOG_MAX_LINES LOG_HEARTBEAT LOG_ALWAYS_SAMPLE_LOAD LOG_STREAK_MILESTONE_SEC LOG_POLL_GAP_WARN_SEC DRY_RUN; do
     if ! grep -qE "^[[:space:]]*${key}=" "${CFG_DIR}/config" 2>/dev/null; then
       grep "^${key}=" "${ROOT}/config/example.config" >>"${CFG_DIR}/config" || true
       echo "  appended ${key} from example.config"
+      case "${key}" in
+        PHASE_*) PHASE_APPENDED=1 ;;
+      esac
     fi
   done
+  if [[ "${PHASE_APPENDED}" -eq 1 ]]; then
+    STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/graceful-shutdown"
+    rm -f "${STATE_DIR}/load-window.tsv"
+    echo ""
+    echo "Phase load keys were added (default PHASE_LOAD_ENABLED=1)."
+    echo "  Cleared ${STATE_DIR}/load-window.tsv if present (drop legacy 10% marks)."
+    echo "  Kill-switches: touch ${CFG_DIR}/inhibit | PHASE_LOAD_ENABLED=0 | POWEROFF_ENABLED=0 |"
+    echo "  systemctl --user stop idle-low-load-shutdown.timer | unlock or move input."
+    if grep -qE '^[[:space:]]*POWEROFF_ENABLED=1' "${CFG_DIR}/config" 2>/dev/null; then
+      echo "  POWEROFF_ENABLED=1: run DRY_RUN=1 ~/.local/bin/idle-low-load-shutdown a few times before relying on the timer."
+    fi
+    echo "  See README Limits and docs/IMPLEMENTATION.md § Migration."
+  fi
 fi
 
 for unit in service timer; do

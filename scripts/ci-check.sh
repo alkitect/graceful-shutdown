@@ -60,9 +60,14 @@ if grep -qF "${_p1}${_p2}" scripts/verify-graceful-shutdown.sh; then
   exit 1
 fi
 
-grep -q 'CHECKER_VERSION=gs-lib-1' scripts/idle-low-load-shutdown.sh
+grep -q 'CHECKER_VERSION=gs-lib-2' scripts/idle-low-load-shutdown.sh
 grep -qE '^POWEROFF_ENABLED=0' config/example.config
 grep -qE '^DRY_RUN=0' config/example.config
+grep -qE '^PHASE_LOAD_ENABLED=1' config/example.config
+for key in PHASE_A_SEC CPU_PHASE_A_MAX_PCT PHASE_B_WINDOW_SEC CPU_PHASE_B_MAX_PCT GPU_PHASE_B_MAX_PCT CPU_PHASE_B_SPIKE_MAX_PCT; do
+  grep -qE "^${key}=" config/example.config \
+    || { echo "ci-check: example.config missing ${key}" >&2; exit 1; }
+done
 
 find scripts -type f -name '*.sh' -print0 | xargs -0 -r bash -n
 ./scripts/test/test-policy-math.sh
@@ -115,7 +120,7 @@ _unit_snap "${_snap_b}"
 "${ROOT}/scripts/install-to-local.sh"
 test -x "${tmp}/.local/bin/idle-low-load-shutdown"
 test -x "${tmp}/.local/bin/verify-graceful-shutdown"
-grep -q 'CHECKER_VERSION=gs-lib-1' "${tmp}/.local/bin/idle-low-load-shutdown"
+grep -q 'CHECKER_VERSION=gs-lib-2' "${tmp}/.local/bin/idle-low-load-shutdown"
 for lib in idle.sh load.sh net.sh backup.sh; do
   test -f "${tmp}/.local/bin/graceful-shutdown-lib/${lib}"
 done
@@ -123,9 +128,30 @@ test ! -e "${tmp}/.local/bin/graceful-shutdown-lib/automation-wanted.sh" \
   || { echo "ci-check: automation-wanted must not install into graceful-shutdown-lib" >&2; exit 1; }
 test -f "${tmp}/.config/graceful-shutdown/config" \
   || { echo "ci-check: config not under tmp HOME (XDG isolation broken?)" >&2; exit 1; }
+for key in PHASE_LOAD_ENABLED PHASE_A_SEC CPU_PHASE_A_MAX_PCT PHASE_B_WINDOW_SEC CPU_PHASE_B_MAX_PCT GPU_PHASE_B_MAX_PCT CPU_PHASE_B_SPIKE_MAX_PCT; do
+  grep -qE "^[[:space:]]*${key}=" "${tmp}/.config/graceful-shutdown/config" \
+    || { echo "ci-check: fresh seed missing ${key}" >&2; exit 1; }
+done
 # Fresh seed: POWEROFF=0, no marker → restore should not arm
 test ! -f "${_cfg}/automation.wanted" \
   || { echo "ci-check: fresh install must not write automation.wanted" >&2; exit 1; }
+
+# Merge PHASE keys into a legacy config that lacks them
+cat >"${_cfg}/config" <<'EOF'
+POWEROFF_ENABLED=0
+INPUT_IDLE_SEC=60
+LOW_LOAD_STREAK_SEC=840
+CPU_MAX_PCT=10
+GPU_MAX_PCT=15
+DRY_RUN=0
+EOF
+"${ROOT}/scripts/install-to-local.sh"
+for key in PHASE_LOAD_ENABLED PHASE_A_SEC CPU_PHASE_A_MAX_PCT PHASE_B_WINDOW_SEC CPU_PHASE_B_MAX_PCT GPU_PHASE_B_MAX_PCT CPU_PHASE_B_SPIKE_MAX_PCT; do
+  grep -qE "^[[:space:]]*${key}=" "${_cfg}/config" \
+    || { echo "ci-check: merge into legacy config missing ${key}" >&2; exit 1; }
+done
+grep -qE '^[[:space:]]*PHASE_LOAD_ENABLED=1' "${_cfg}/config" \
+  || { echo "ci-check: merge must set PHASE_LOAD_ENABLED=1 from example" >&2; exit 1; }
 
 # Marker survives uninstall; purge removes it
 aw_mark_wanted "${_cfg}"

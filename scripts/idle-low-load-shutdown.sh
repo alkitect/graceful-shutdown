@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Graceful shutdown: 1 min no input, then 14 min low CPU/GPU (streak pauses on busy load/net/backup).
-# Bulk RX/TX keeps the machine awake for large downloads. Ubuntu Backup (Déjà Dup/duplicity) pauses too.
+# Graceful shutdown: 1 min no input, then 14 min load streak (pauses on busy load/net/backup).
+# Default: two-phase load (critical then rolling avg). Bulk RX/TX and Ubuntu Backup pause too.
 # Invoked by systemd user timer — do not run manually unless DRY_RUN=1 or POWEROFF_ENABLED=0.
 set -euo pipefail
-CHECKER_VERSION=gs-lib-1
+CHECKER_VERSION=gs-lib-2
 
 CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/graceful-shutdown"
 CFG="${CFG_DIR}/config"
@@ -44,7 +44,16 @@ HIGH_LOAD_POLLS_TO_RESET=2
 GRACE_SEC=120
 CPU_SAMPLE_SEC=3
 EXT_CMD_TIMEOUT_SEC=5
-# Soft load window (0=legacy per-poll with hysteresis).
+# Two-phase load (default). PHASE_LOAD_ENABLED=0 restores CPU_MAX_PCT single-threshold.
+PHASE_LOAD_ENABLED=1
+PHASE_A_SEC=600
+CPU_PHASE_A_MAX_PCT=65
+PHASE_B_WINDOW_SEC=180
+CPU_PHASE_B_MAX_PCT=50
+GPU_PHASE_B_MAX_PCT=20
+CPU_PHASE_B_SPIKE_MAX_PCT=80
+PHASE_B_MIN_SAMPLES=5
+# Soft load window (legacy only when PHASE_LOAD_ENABLED=0).
 LOAD_WINDOW_ENABLED=0
 LOAD_WINDOW_POLLS=8
 LOAD_WINDOW_MIN_OK_FRAC=95
@@ -107,6 +116,9 @@ BACKUP_BUSY=0
 BACKUP_DISP="-"
 PAUSE_REASON="-"
 LOAD_HYST_BLOCKING=0
+EFFECTIVE_STREAK_SEC=0
+PHASE_DISP="-"
+WINDOW_SPIKE=0
 
 mkdir -p "${STATE_DIR}" "$(dirname "${LOG_FILE}")"
 
@@ -298,7 +310,12 @@ log_poll() {
 
   [[ "${LOG_HEARTBEAT}" == "1" ]] || return 0
 
-  if [[ "${LOAD_WINDOW_ENABLED}" == "1" ]]; then
+  if [[ "${PHASE_LOAD_ENABLED}" == "1" ]]; then
+    extra+=" phase=${PHASE_DISP}"
+    if [[ "${PHASE_DISP}" == "B" ]]; then
+      extra+=" win_cpu_avg=${WINDOW_CPU_AVG}% win_gpu_avg=${WINDOW_GPU_AVG}% win=${WINDOW_DISP}"
+    fi
+  elif [[ "${LOAD_WINDOW_ENABLED}" == "1" ]]; then
     extra+=" win=${WINDOW_DISP}"
   fi
   extra+=" hyst=${HYST_DISP}"
@@ -391,8 +408,20 @@ send_grace_notification() {
   local remaining="$1"
   if command -v notify-send >/dev/null 2>&1; then
     notify-send -u critical "Shutting down soon" \
-      "No input for 15+ min and load is low. Powering off in ${remaining}s unless you move the mouse or press a key."
+      "No input for 15+ min and the machine is not doing hard work. Powering off in ${remaining}s unless you move the mouse or press a key."
   fi
+}
+
+# Sample + append ring for grace/poweroff paths (keeps spike eval current).
+sample_and_append_load() {
+  if ! sample_load_if_needed 1; then
+    return 1
+  fi
+  append_load_sample
+  if [[ "${PHASE_LOAD_ENABLED}" == "1" ]]; then
+    load_phase_window_stats || true
+  fi
+  return 0
 }
 
 run_check() {
@@ -438,20 +467,24 @@ run_check() {
     exit 0
   fi
 
+  EFFECTIVE_STREAK_SEC="$(effective_streak_sec)"
   if ! sample_load_if_needed 1; then
     log_poll "cpu_sample_invalid" "${input_idle_sec}" "${idle_source}" "-" "-" "0"
     exit 0
   fi
 
   append_load_sample
-  evaluate_load_window || true
-
-  if [[ "${LOAD_WINDOW_ENABLED}" == "1" && "${WINDOW_WARMUP}" == "1" ]]; then
-    clear_high_load_strikes
-    clear_streak
-    clear_grace
-    log_poll "window_warmup" "${input_idle_sec}" "${idle_source}" "-" "-" "0"
-    exit 0
+  if [[ "${PHASE_LOAD_ENABLED}" == "1" ]]; then
+    load_phase_eval || true
+  elif [[ "${LOAD_WINDOW_ENABLED}" == "1" ]]; then
+    evaluate_load_window || true
+    if [[ "${WINDOW_WARMUP}" == "1" ]]; then
+      clear_high_load_strikes
+      clear_streak
+      clear_grace
+      log_poll "window_warmup" "${input_idle_sec}" "${idle_source}" "-" "-" "0"
+      exit 0
+    fi
   fi
 
   if policy_is_blocking; then
@@ -473,6 +506,7 @@ run_check() {
   fi
 
   streak_sec="$(effective_streak_sec)"
+  EFFECTIVE_STREAK_SEC="${streak_sec}"
   maybe_event_streak_progress "${streak_sec}"
 
   if (( streak_sec < LOW_LOAD_STREAK_SEC )); then
@@ -541,10 +575,13 @@ run_check() {
     input_idle_sec="${INPUT_IDLE_SEC_RESULT}"
     measure_net_bps
     measure_backup_busy
-    if ! sample_load_if_needed 1; then
+    EFFECTIVE_STREAK_SEC="$(effective_streak_sec)"
+    if ! sample_and_append_load; then
+      log "event: grace cancelled (load sample failed)"
+      clear_policy_state
       exit 0
     fi
-    if load_is_high || net_sample_is_bulk || backup_is_busy; then
+    if load_phase_critical_busy || net_sample_is_bulk || backup_is_busy; then
       log "event: grace cancelled (load/net/backup busy cpu=${CPU_PCT_RESULT}% gpu=${GPU_PCT_RESULT}% net_rx=${NET_RX_BPS}B/s net_tx=${NET_TX_BPS}B/s backup=${BACKUP_DISP})"
       clear_policy_state
       exit 0
@@ -563,10 +600,13 @@ run_check() {
   input_idle_sec="${INPUT_IDLE_SEC_RESULT}"
   measure_net_bps
   measure_backup_busy
-  if ! sample_load_if_needed 1; then
+  EFFECTIVE_STREAK_SEC="$(effective_streak_sec)"
+  if ! sample_and_append_load; then
+    log "event: grace expired but load sample failed — aborting poweroff"
+    clear_policy_state
     exit 0
   fi
-  if load_is_high || net_sample_is_bulk || backup_is_busy; then
+  if load_phase_critical_busy || net_sample_is_bulk || backup_is_busy; then
     log "event: grace expired but load/net/backup busy — aborting poweroff"
     clear_policy_state
     exit 0
